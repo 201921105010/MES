@@ -48,6 +48,11 @@
             <artifactId>mes-workorder</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.mes.scheduler</groupId>
+            <artifactId>mes-resource</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         
         <!-- MyBatis Plus -->
         <dependency>

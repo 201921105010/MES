@@ -20,10 +20,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="360">
           <template #default="scope">
             <el-button size="small" type="success" @click="handleExplodeBOM(scope.row)">展开BOM</el-button>
             <el-button size="small" type="primary" @click="handleSchedule(scope.row)">排程</el-button>
+            <el-button size="small" type="warning" @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -33,8 +35,8 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { createOrder, listOrders } from '../../api/order'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { createOrder, deleteOrder, listOrders, updateOrder } from '../../api/order'
 import { explodeBom } from '../../api/bom'
 import { createWorkOrder } from '../../api/workorder'
 import { createScheduleTask } from '../../api/schedule'
@@ -111,6 +113,44 @@ const handleSchedule = async (row: OrderHeader) => {
     await loadOrders()
   } catch {
     ElMessage.error('排程失败')
+  }
+}
+
+const handleEdit = async (row: OrderHeader) => {
+  if (row.id === undefined) {
+    ElMessage.error('订单缺少主键，无法编辑')
+    return
+  }
+  try {
+    const { value } = await ElMessageBox.prompt('请输入新的订单数量', '编辑订单', {
+      inputValue: String(row.orderQty),
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputPattern: /^(\d+)(\.\d+)?$/,
+      inputErrorMessage: '请输入有效数字'
+    })
+    await updateOrder(row.id, { ...row, orderQty: Number(value) })
+    ElMessage.success('订单已更新')
+    await loadOrders()
+  } catch {
+  }
+}
+
+const handleDelete = async (row: OrderHeader) => {
+  if (row.id === undefined) {
+    ElMessage.error('订单缺少主键，无法删除')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`确认删除订单 ${row.orderNo} 吗？`, '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deleteOrder(row.id)
+    ElMessage.success('订单已删除')
+    await loadOrders()
+  } catch {
   }
 }
 
