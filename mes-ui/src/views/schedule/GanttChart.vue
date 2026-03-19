@@ -5,8 +5,8 @@
         <div class="card-header">
           <span>排程甘特图</span>
           <el-button-group>
-            <el-button type="primary" size="small">按工作中心</el-button>
-            <el-button size="small">按订单</el-button>
+            <el-button :type="groupBy === 'workCenter' ? 'primary' : 'default'" size="small" @click="changeGroup('workCenter')">按工作中心</el-button>
+            <el-button :type="groupBy === 'workOrder' ? 'primary' : 'default'" size="small" @click="changeGroup('workOrder')">按工单</el-button>
           </el-button-group>
         </div>
       </template>
@@ -16,15 +16,38 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
+import { listScheduleTasks } from '../../api/schedule'
+import type { ScheduleTask } from '../../types/schedule'
 
 let chart: echarts.ECharts | null = null
+const groupBy = ref<'workCenter' | 'workOrder'>('workCenter')
+const tasks = ref<ScheduleTask[]>([])
 
-onMounted(() => {
-  chart = echarts.init(document.getElementById('gantt') as HTMLElement)
-  
-  // 模拟简单的 ECharts 甘特图配置
+const renderChart = () => {
+  if (!chart) {
+    return
+  }
+  const categories = Array.from(
+    new Set(
+      tasks.value.map((task) => groupBy.value === 'workCenter' ? task.workCenterCode : task.woNo)
+    )
+  )
+  const data = tasks.value.map((task) => {
+    const categoryValue = groupBy.value === 'workCenter' ? task.workCenterCode : task.woNo
+    const categoryIndex = categories.indexOf(categoryValue)
+    return {
+      name: `工单 ${task.woNo} / 工序 ${task.opNo}`,
+      value: [
+        categoryIndex,
+        new Date(task.planStartTime).getTime(),
+        new Date(task.planEndTime).getTime()
+      ],
+      itemStyle: { color: '#5470c6' }
+    }
+  })
   const option = {
     tooltip: {
       formatter: function (params: any) {
@@ -37,7 +60,7 @@ onMounted(() => {
     },
     yAxis: {
       type: 'category',
-      data: ['CNC加工中心', '装配产线', '质检工位']
+      data: categories
     },
     series: [
       {
@@ -68,23 +91,30 @@ onMounted(() => {
           x: [1, 2],
           y: 0
         },
-        data: [
-          {
-            name: '工单 WO-001 (下料)',
-            value: [0, new Date('2026-03-19T08:00:00').getTime(), new Date('2026-03-19T12:00:00').getTime()],
-            itemStyle: { color: '#5470c6' }
-          },
-          {
-            name: '工单 WO-001 (装配)',
-            value: [1, new Date('2026-03-19T13:00:00').getTime(), new Date('2026-03-19T17:00:00').getTime()],
-            itemStyle: { color: '#91cc75' }
-          }
-        ]
+        data: data
       }
     ]
   }
-  
   chart.setOption(option)
+}
+
+const loadTasks = async () => {
+  try {
+    tasks.value = await listScheduleTasks()
+    renderChart()
+  } catch {
+    ElMessage.error('排程数据加载失败')
+  }
+}
+
+const changeGroup = (value: 'workCenter' | 'workOrder') => {
+  groupBy.value = value
+  renderChart()
+}
+
+onMounted(async () => {
+  chart = echarts.init(document.getElementById('gantt') as HTMLElement)
+  await loadTasks()
 })
 
 onUnmounted(() => {

@@ -8,7 +8,7 @@
         </div>
       </template>
       
-      <el-table :data="tableData" style="width: 100%" border>
+      <el-table :data="tableData" :loading="loading" style="width: 100%" border>
         <el-table-column prop="orderNo" label="订单号" width="180" />
         <el-table-column prop="productCode" label="产品编码" width="150" />
         <el-table-column prop="orderQty" label="订单数量" width="120" />
@@ -32,24 +32,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { createOrder, listOrders } from '../../api/order'
+import { explodeBom } from '../../api/bom'
+import { createWorkOrder } from '../../api/workorder'
+import { createScheduleTask } from '../../api/schedule'
+import type { OrderHeader } from '../../types/order'
 
-const tableData = ref([
-  {
-    orderNo: 'MO202603190001',
-    productCode: 'P-10001',
-    orderQty: 100,
-    dueTime: '2026-03-25 18:00:00',
-    status: 'NEW'
-  },
-  {
-    orderNo: 'MO202603190002',
-    productCode: 'P-10002',
-    orderQty: 50,
-    dueTime: '2026-03-26 12:00:00',
-    status: 'PLANNED'
+const tableData = ref<OrderHeader[]>([])
+const loading = ref(false)
+
+const loadOrders = async () => {
+  loading.value = true
+  try {
+    tableData.value = await listOrders()
+  } catch {
+    ElMessage.error('订单加载失败')
+  } finally {
+    loading.value = false
   }
-])
+}
 
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {
@@ -62,18 +65,58 @@ const getStatusType = (status: string) => {
 }
 
 const handleCreate = () => {
-  // 模拟创建
+  createOrder({
+    productCode: 'P-10001',
+    orderQty: 10,
+    dueTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    status: 'NEW',
+    sourceType: 'MANUAL'
+  })
+    .then(async () => {
+      ElMessage.success('订单已创建')
+      await loadOrders()
+    })
+    .catch(() => {
+      ElMessage.error('创建订单失败')
+    })
 }
 
-const handleExplodeBOM = (row: any) => {
-  // 模拟BOM展开
-  console.log('Explode BOM for:', row.orderNo)
+const handleExplodeBOM = async (row: OrderHeader) => {
+  try {
+    const result = await explodeBom(row.productCode, Number(row.orderQty))
+    ElMessage.success(`BOM 展开完成，需求项 ${result.length} 条`)
+  } catch {
+    ElMessage.error('BOM 展开失败')
+  }
 }
 
-const handleSchedule = (row: any) => {
-  // 模拟排程
-  console.log('Schedule for:', row.orderNo)
+const handleSchedule = async (row: OrderHeader) => {
+  try {
+    const wo = await createWorkOrder({
+      orderNo: row.orderNo,
+      materialCode: row.productCode,
+      woQty: Number(row.orderQty),
+      status: 'NEW'
+    })
+    await createScheduleTask({
+      scheduleNo: `SCH${Date.now()}`,
+      woNo: wo.woNo,
+      opNo: 10,
+      workCenterCode: 'WC-01',
+      planStartTime: new Date().toISOString(),
+      planEndTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      scheduleStatus: 'NORMAL'
+    })
+    ElMessage.success('已生成工单并完成排程')
+    await loadOrders()
+  } catch {
+    ElMessage.error('排程失败')
+  }
 }
+
+onMounted(async () => {
+  await loadOrders()
+})
 </script>
 
 <style scoped>
